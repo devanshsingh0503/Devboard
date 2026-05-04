@@ -1,12 +1,12 @@
 'use client';
 import { useState } from 'react';
 import { Search, Loader2, Sparkles, GitPullRequest } from 'lucide-react';
-import ReviewResult from '@/components/ReviewResult';
+import ReviewResult, { type ReviewData } from '@/components/ReviewResult';
 
 export default function Home() {
   const [url, setUrl] = useState('');
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<any>(null);
+  const [result, setResult] = useState<ReviewData | null>(null);
   const [error, setError] = useState('');
 
   async function handleSubmit(e?: React.FormEvent) {
@@ -20,13 +20,13 @@ export default function Home() {
       const res = await fetch('/api/review', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prUrl: url }),
+        body: JSON.stringify({ repoUrl: url }),
       });
       const data = await res.json();
       if (data.error) throw new Error(data.error);
       setResult(data);
-    } catch (e: any) {
-      setError(e.message || 'An unexpected error occurred');
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'An unexpected error occurred');
     } finally {
       setLoading(false);
     }
@@ -49,7 +49,7 @@ export default function Home() {
             DevBoard
           </h1>
           <p className="text-lg text-slate-400 max-w-xl mx-auto">
-            Paste a GitHub Pull Request URL below and let our AI engine analyze the diff, catch bugs, and summarize the changes instantly.
+            Paste a GitHub Repository URL below and let our AI engine analyze the README, issues, and recent commits instantly.
           </p>
         </div>
 
@@ -64,7 +64,7 @@ export default function Home() {
               type="url"
               value={url}
               onChange={(e) => setUrl(e.target.value)}
-              placeholder="https://github.com/owner/repo/pull/123"
+              placeholder="https://github.com/owner/repo"
               className="flex-1 bg-transparent border-none outline-none px-4 py-4 text-lg text-white placeholder-slate-500 w-full"
               required
             />
@@ -81,7 +81,7 @@ export default function Home() {
               ) : (
                 <>
                   <Search className="w-5 h-5" />
-                  Review PR
+                  Review Repo
                 </>
               )}
             </button>

@@ -1,13 +1,29 @@
-export function parsePRUrl(url: string) {
-  const match = url.match(
-    /github\.com\/([^\/]+)\/([^\/]+)\/pull\/(\d+)/
-  );
-  if (!match) throw new Error('Invalid GitHub PR URL');
-  return { owner: match[1], repo: match[2], pull_number: parseInt(match[3]) };
+export function parseRepoUrl(url: string) {
+  const match = url.match(/github\.com\/([^\/]+)\/([^\/]+)/);
+  if (!match) throw new Error('Invalid GitHub repo URL');
+  return { owner: match[1], repo: match[2].replace(/\.git$/, '') };
 }
 
-export async function getPRData(url: string) {
-  const { owner, repo, pull_number } = parsePRUrl(url);
+interface GitHubRepo {
+  name: string;
+  description: string | null;
+  language: string | null;
+  stargazers_count: number;
+  forks_count: number;
+}
+
+interface GitHubCommit {
+  commit: {
+    message: string;
+  };
+}
+
+interface GitHubIssue {
+  title: string;
+}
+
+export async function getRepoData(url: string) {
+  const { owner, repo } = parseRepoUrl(url);
   const headers: Record<string, string> = {
     Accept: 'application/vnd.github.v3+json',
   };
@@ -15,21 +31,30 @@ export async function getPRData(url: string) {
     headers['Authorization'] = `Bearer ${process.env.GITHUB_TOKEN}`;
   }
 
-  const [prRes, diffRes] = await Promise.all([
-    fetch(`https://api.github.com/repos/${owner}/${repo}/pulls/${pull_number}`, { headers }),
-    fetch(`https://api.github.com/repos/${owner}/${repo}/pulls/${pull_number}`, {
-      headers: { ...headers, Accept: 'application/vnd.github.v3.diff' },
+  const [repoRes, commitsRes, issuesRes, readmeRes] = await Promise.all([
+    fetch(`https://api.github.com/repos/${owner}/${repo}`, { headers }),
+    fetch(`https://api.github.com/repos/${owner}/${repo}/commits?per_page=5`, { headers }),
+    fetch(`https://api.github.com/repos/${owner}/${repo}/issues?state=open&per_page=5`, { headers }),
+    fetch(`https://api.github.com/repos/${owner}/${repo}/readme`, {
+      headers: { ...headers, Accept: 'application/vnd.github.v3.raw' },
     }),
   ]);
 
-  if (!prRes.ok) throw new Error('PR not found or private repo');
-  const pr = await prRes.json();
-  const diff = await diffRes.text();
+  if (!repoRes.ok) throw new Error('Repo not found or is private');
+
+  const repoData = await repoRes.json() as GitHubRepo;
+  const commits = commitsRes.ok ? await commitsRes.json() as GitHubCommit[] : [];
+  const issues = issuesRes.ok ? await issuesRes.json() as GitHubIssue[] : [];
+  const readme = readmeRes.ok ? await readmeRes.text() : 'No README found';
 
   return {
-    title: pr.title,
-    description: pr.body || '',
-    author: pr.user.login,
-    diff: diff.slice(0, 8000),
+    name: repoData.name,
+    description: repoData.description || 'No description',
+    language: repoData.language || 'Unknown',
+    stars: repoData.stargazers_count,
+    forks: repoData.forks_count,
+    readme: readme.slice(0, 3000),
+    commits: commits.map((c) => c.commit.message).join('\n'),
+    issues: issues.map((i) => i.title).join('\n'),
   };
 }

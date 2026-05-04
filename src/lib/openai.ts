@@ -1,38 +1,41 @@
-import OpenAI from 'openai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
-const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
-export async function reviewPR(prData: {
-  title: string;
-  description: string;
-  diff: string;
+export async function reviewRepo(repoData: {
+  name: string; description: string;
+  language: string; stars: number;
+  readme: string; commits: string; issues: string;
 }) {
-  const prompt = `You are a senior software engineer doing a code review.
+  const prompt = `You are a senior software engineer reviewing a GitHub repository.
 
-PR Title: ${prData.title}
-PR Description: ${prData.description}
+Repo: ${repoData.name}
+Language: ${repoData.language} | Stars: ${repoData.stars}
 
-Code Diff:
-${prData.diff}
+README: ${repoData.readme}
+Recent commits: ${repoData.commits}
+Open issues: ${repoData.issues || 'None'}
 
-Respond ONLY with JSON in this exact format:
+Respond ONLY with a valid JSON object in this exact format (no markdown code blocks, no backticks, just the JSON string):
 {
   "summary": "2-3 sentence overview",
-  "score": 85,
-  "issues": [
-    { "severity": "high|medium|low", "title": "...", "detail": "..." }
-  ],
-  "suggestions": [
-    { "title": "...", "detail": "..." }
-  ],
-  "positives": ["What was done well"]
+  "score": 78,
+  "strengths": ["strength 1", "strength 2"],
+  "issues": [{ "severity": "high|medium|low", "title": "...", "detail": "..." }],
+  "suggestions": [{ "title": "...", "detail": "..." }],
+  "readmeQuality": "good|average|poor",
+  "commitQuality": "good|average|poor"
 }`;
 
-  const res = await client.chat.completions.create({
-    model: 'gpt-4o-mini',
-    messages: [{ role: 'user', content: prompt }],
-    response_format: { type: 'json_object' },
+  const model = genAI.getGenerativeModel({ 
+    model: 'gemini-1.5-flash-latest',
+    generationConfig: {
+      responseMimeType: "application/json",
+    }
   });
 
-  return JSON.parse(res.choices[0].message.content || '{}');
+  const result = await model.generateContent(prompt);
+  const text = result.response.text();
+  
+  return JSON.parse(text);
 }
